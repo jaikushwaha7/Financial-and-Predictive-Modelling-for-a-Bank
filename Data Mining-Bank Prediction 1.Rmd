@@ -1,0 +1,451 @@
+---
+title: "Group Assignment Data Mining"
+author: "Jai Kushwaha"
+date: "05/12/2019"
+output:
+  word_document: default
+  pdf_document: default
+group: Jai Kushwaha, Vaibhav Shringi and Shubham Grover
+Date: 08.12.2019
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Thera Bank - Loan Purchase Modelling
+
+
+This case is about a bank (Thera Bank) which has a growing customer base. Majority of these
+customers are liability customers (depositors) with varying size of deposits. The number of
+customers who are also borrowers (asset customers) is quite small, and the bank is interested in
+expanding this base rapidly to bring in more loan business and in the process, earn more through
+the interest on loans. In particular, the management wants to explore ways of converting its
+liability customers to personal loan customers (while retaining them as depositors). A campaign
+that the bank ran last year for liability customers showed a healthy conversion rate of over 9%
+success. This has encouraged the retail marketing department to devise campaigns with better
+target marketing to increase the success ratio with a minimal budget. The department wants to
+build a model that will help them identify the potential customers who have a higher probability of
+purchasing the loan. This will increase the success ratio while at the same time reduce the cost
+of the campaign. The dataset has data on 5000 customers. The data include customer
+demographic information (age, income, etc.), the customer&#39;s relationship with the bank
+(mortgage, securities account, etc.), and the customer response to the last personal loan
+campaign (Personal Loan). Among these 5000 customers, only 480 (= 9.6%) accepted the
+personal loan that was offered to them in the earlier campaign.
+
+You are brought in as a consultant and your job is to build the best model which can classify the
+right customers who have a higher probability of purchasing the loan. You are expected to do the
+following:
+● EDA of the data available. Showcase the results using appropriate graphs
+● Apply appropriate clustering on the data and interpret the output
+● Build appropriate models on both the test and train data (CART, Random Forest). Interpret
+all the model outputs and do the necessary modifications wherever eligible (such as pruning)
+● Check the performance of all the models that you have built (test and train). Use all the
+model performance measures you have learned so far. Share your remarks on which model
+performs the best.
+
+Dataset : Thera Bank-Data Set.xlsx
+
+EDA for Thera Bank Data
+
+Basic Understanding of Data
+```{r}
+library(ggplot2)
+library(rJava)
+library(Deducer)
+library(lattice)
+library(caret)
+library(NbClust)
+library(randomForest)
+library(MLmetrics)
+library(rpart)
+library(rpart.plot)
+library("neuralnet")
+library(JGR)
+library(pscl)
+library(lmtest)
+library(pROC)
+library(caTools)
+library(dummies)
+library(dplyr)
+library(fpc)
+library(readxl)
+library(cluster)
+library(rattle)
+library(RColorBrewer)
+library("data.table")
+library("scales")
+library(ROCR)
+library(ineq)
+library(ggcorrplot)
+library(gridExtra)
+setwd("D:/Study/Great Lakes/Data Mining/Group Assignment")
+Thera_Bank = read_excel("Thera Bank-Data Set_Orignal.xlsx")
+str(Thera_Bank)
+
+```
+
+```{r}
+dim(Thera_Bank)
+```
+
+
+```{r}
+summary(Thera_Bank)
+```
+
+From the Summary it is important to Observe that the Data would require treatment:
+- Experience in Years has a negative value which would need to standardized
+- Family member have NA values which would require Missing value treatment.
+
+```{r}
+Thera_Bank$Familymembers[is.na(Thera_Bank$Familymembers)]=0
+any(is.na(Thera_Bank)) ## no missing value
+```
+```{r}
+## Negative values of experience changed to 0
+
+Thera_Bank$Experience_in_years [Thera_Bank$Experience_in_years<= 0.1 ]=0
+summary(Thera_Bank)
+```
+From the Summary it can be concluded that the data no longer suffers from 
+- Negative value 
+- NA values 
+
+```{r}
+X = round(cor(Thera_Bank[2:14]),2)
+ggcorrplot(X, hc.order = TRUE, type = "lower",outline.col = "white", method = "circle")
+```
+From the Correlation plot it can be observed that :
+- Age in Years is highly correlated with Experience in Year which is expected behaviour. 
+- Personal loan is highly correlated with Income in 1000s per month and CC avg. It is important to also observe that CC avg is highly correlated with Income in 1000s per month. 
+- of all the parameters, we do not observe any highly negative correlation among the variables.
+
+
+```{r}
+plot1 = ggplot(Thera_Bank, aes(Thera_Bank$Age_in_years, fill=Thera_Bank$PersonalLoan)) + geom_density(alpha=0.4, fill="orange")
+plot2 = ggplot(Thera_Bank, aes(Thera_Bank$Experience_in_years, fill=Thera_Bank$PersonalLoan)) + geom_density(alpha=0.4,fill="Purple")
+plot3 = ggplot(Thera_Bank, aes(Thera_Bank$Income_in_Kpermonth, fill=Thera_Bank$PersonalLoan)) + geom_density(alpha=0.4, fill = "green")
+plot4 = ggplot(Thera_Bank, aes(Thera_Bank$Education, fill= PersonalLoan)) + geom_histogram(alpha=0.4,bins = 10, fill= "blue")
+plot5 = ggplot(Thera_Bank, aes(Thera_Bank$Income_in_Kpermonth, fill= Education)) + geom_histogram(alpha=0.4, bins = 70)
+plot6 = ggplot(Thera_Bank, aes(Thera_Bank$Income_in_Kpermonth, Mortgage, color = PersonalLoan)) +   geom_point(alpha = 0.7)
+plot7 = ggplot(Thera_Bank, aes(Thera_Bank$Income_in_Kpermonth, CCAvg, color = PersonalLoan)) +   geom_point(alpha = 0.7)
+plot8 = ggplot(Thera_Bank, aes(Thera_Bank$Mortgage, CCAvg, color = PersonalLoan)) +   geom_point(alpha = 0.7)
+
+grid.arrange( plot1, plot2, plot3, plot4, plot5, plot6,plot7, plot8, nrow = 4, ncol = 2)
+```
+
+Observation:
+Graph 1
+- From the first graph it can be observed that people in the age bracket of 30-60 are most likely to take personal loan.
+Graph 2:
+ We observe a sharp growth in the number of personal loans by people in their early professsional years i.e. less than 10 years 
+
+Graph 3: 
+It can be observed that people with income less than 100K per month are more likely to opt for Personal loan 
+
+Graph 4:
+UnderGraduates are more likely to take personal loan than Graduate and Advance Professional
+
+Graph 5: 
+We observe a large number of educated professionals within the 100K per month income group. 
+
+Graph 6: 
+We observe that when the income is less than 100K per month, people even with mortage are unlikely to opt for Personal loan While high income group i.e more than 100K per month but less than 180K per month with a high mortage are more likely to opt for Personal Loan 
+
+Graph 7: 
+We observe that people with Income within 100K per month are not likely to opt for Personal loan 
+However, high credit card spending with High income are prone to opt for Personal loan 
+
+Graph 8 :
+While in Graph 6,7 we can observe a trend which is missing in the CCAvg v/s Mortage graph.
+Higher Mortage are most likely to opt for Personal Loan.
+Also, CCAvg bracket of 0.5 to 0.75 are inclined to personal loan irrespective of the mortage amount.
+
+```{r}
+## Clustering
+
+## Initial Data modification
+## Changing education, personal loan,securities account, cd account, online and credit card to factor
+Thera_Bank$Education= factor(Thera_Bank$Education, levels = c(1,2,3), labels = c("undergrad", "graduate","advanced professional"))
+Thera_Bank$PersonalLoan=as.factor(Thera_Bank$PersonalLoan)
+Thera_Bank$SecuritiesAccount=as.factor(Thera_Bank$SecuritiesAccount)
+Thera_Bank$CDAccount=as.factor(Thera_Bank$CDAccount)
+Thera_Bank$Online=as.factor(Thera_Bank$Online)
+Thera_Bank$CreditCard=as.factor(Thera_Bank$CreditCard)
+
+#Inserting Data
+ktb = Thera_Bank[,c(1:7,9)]
+str(ktb)
+sktb = scale(ktb[,c(2:8)])
+View(sktb)
+head(sktb)
+
+```
+
+Observations:
+We have scaled the data to bring Data Homogeniety. However, it is important to note that the negative values showcased does not impact the K Means clustering which would be performed subsequently as the clusters are formed basis the distance btw points. 
+```{r}
+## Hierarchical clustering of data
+
+d.euc=dist(x=sktb,method = "euclidean")
+
+clus1 = hclust(d.euc, method = "average") 
+plot(clus1, labels = as.character(sktb[,1]))
+```
+Observations:
+It can be observed that for higher number of records the Hierarchical clustering fail to give any definite results as the dendograms fail to provide any results. As observed above
+
+```{r}
+clus2 <- hclust(d.euc, method = "ward.D2")
+plot(clus2, labels = as.character(sktb[,1]))
+#rect.hclust(clus2, k=2, border="red")
+rect.hclust(clus2, k=3, border="red")
+#clus2$height
+```
+Observations:
+Using Ward.D2 method, we have created 3 clusters however, they are still very cluttered. 
+```{r}
+## profiling the cluster
+ktb$Clusters <- cutree(clus2, k=3)
+aggr = aggregate(ktb[,2:8],list(ktb$Clusters),mean)
+
+head(aggr)
+```
+
+Divided into 3 groups 
+1. Low, Medium and High Income
+2. Low mortgage low cc spend and low age should be the target customer as there required ment will increase with time
+3. As we can think of high income and high experience are having high mortgage loan and cc spends. and want to invest more by taking personal loan as they are capable and bank prefers these customers.
+
+
+
+```{r}
+## Identifying optimal no. of clusters
+
+wssplot <- function(data,nc){
+  wss <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 2:nc) {
+    wss[i] <- sum(kmeans(data,centers=i)$withinss)}
+  plot(1:nc,wss,type="b",xlab="Number of Clusters",
+       ylab="Within group sum of squares")}
+
+wssplot(sktb,nc=5)
+```
+
+```{r}
+set.seed(1234)
+
+nc <- NbClust(sktb[,c(-1)], min.nc=2, max.nc=4, method="kmeans")
+table(nc$Best.n[1,])
+barplot(table(nc$Best.n[1,]),
+        xlab="Numer of Clusters", ylab="Number of Criteria",
+        main="Number of Clusters Chosen by 12 Criteria")
+
+nc
+
+```
+
+Observations: 
+It can be seen that the optimal number of clusters are 3 which has been selected using 12 criterion 
+
+```{r}
+kmeans.clus = kmeans(x= sktb, centers = 3, nstart =25 )
+kmeans.clus   
+
+```
+Observation:
+As it is shown even KMeans is recommeding creating 3 clusters which has the explanation power of 35.3% 
+the K Means clustering indicates that we can create 3 Cluster of 2136, 2025, 839 sizes respectively
+
+```{r}
+plotcluster( sktb,  kmeans.clus$cluster )
+clusplot(sktb, kmeans.clus$cluster, 
+         color=TRUE, shade=TRUE, labels=0, lines=0,plotchar = TRUE)
+```
+```{r}
+ktb.kmeans = Thera_Bank[,c(1:7,9)]
+ktb.kmeans$Clusters <- kmeans.clus$cluster
+head(ktb.kmeans)
+aggr = aggregate(ktb.kmeans[,-c(1)],list(ktb.kmeans$Clusters),mean)
+clus.profile <- data.frame( Cluster=aggr[,1],
+                            Freq=as.vector(table(ktb.kmeans$Clusters)),
+                            aggr[,-1])
+
+head(clus.profile)
+```
+Insights:
+1. Using NB clus and K Means we can observe that the data can be classified into 3 clusters. 
+2. K Means recommends classifying the three clusters into 2136, 2025, 839 sizes respectively
+
+######################################################################################################################
+## CART
+
+```{r}
+## CART
+
+# Train Data
+
+Thera_Bank = read_excel(file.choose())
+Thera_Bank$Familymembers[is.na(Thera_Bank$Familymembers)]=0
+any(is.na(Thera_Bank)) ## no missing value
+## Negative values of experience changed to 0
+Thera_Bank$Experience_in_years [Thera_Bank$Experience_in_years<= 0.1 ]=0
+summary(Thera_Bank)
+
+Thera_Bank$random <- runif (nrow(Thera_Bank), 0, 1);
+TBank.train <- Thera_Bank [which(Thera_Bank$random <= 0.7),]
+Tbank.test <- Thera_Bank [which(Thera_Bank$random > 0.7),] 
+c (nrow(TBank.train), nrow(Tbank.test))
+```
+
+For performing CART analysis the data was divided into Training and Test using the 70:30 rule 
+```{r}
+TBank.train$Education= factor(TBank.train$Education, levels = c(1,2,3), labels = c("undergrad", "graduate","advanced professional"))
+TBank.train$PersonalLoan=as.factor(TBank.train$PersonalLoan)
+TBank.train$`SecuritiesAccount`=as.factor(TBank.train$`SecuritiesAccount`)
+TBank.train$`CDAccount`=as.factor(TBank.train$CDAccount)
+TBank.train$`Online`=as.factor(TBank.train$`Online`)
+TBank.train$CreditCard=as.factor(TBank.train$CreditCard)
+
+
+Tbank.test$Education= factor(Tbank.test$Education, levels = c(1,2,3), labels = c("undergrad", "graduate","advanced professional"))
+Tbank.test$`PersonalLoan`=as.factor(Tbank.test$`PersonalLoan`)
+Tbank.test$`SecuritiesAccount`=as.factor(Tbank.test$`SecuritiesAccount`)
+Tbank.test$`CDAccount`=as.factor(Tbank.test$`CDAccount`)
+Tbank.test$`Online`=as.factor(Tbank.test$`Online`)
+Tbank.test$CreditCard=as.factor(Tbank.test$CreditCard)
+
+dim(TBank.train)
+dim(Tbank.test)
+table(TBank.train$`PersonalLoan`)/nrow(TBank.train)
+table(Tbank.test$PersonalLoan)/nrow(Tbank.test)
+
+```
+
+For the above it can be observed that:
+1. In the Training data 9.48% took loan as opposed to 90.5% who dint take the loan
+2. In the test data set we can see that 9.87% opted for loan as against 90.12% who dint. 
+Overall our Train and Test data are not biased. 
+
+```{r}
+## setting the control paramter inputs for rpart 
+##(Pre pruning, post pruning & Greedy Algorithm negator)
+r.ctrl = rpart.control(minsplit=30, minbucket = 10, cp = 0, xval = 10)
+
+## calling the rpart function to build the tree
+m1 <- rpart(formula = TBank.train$`PersonalLoan` ~ ., data = TBank.train[,2:14], method = "class", control = r.ctrl)
+m1
+```
+We have observed that the CART produced 9 leaves 
+```{r}
+## Tree plot
+fancyRpartPlot(m1)
+```
+Our observations in the above has been showed via a plot. Here we can observe that 9 leaves are produced. All those in dark blue are most likely followed by light blue with likely. 
+
+Here we additionally observe that following combinations are more likely to opt for Personal loan:
+
+- Graduate and Advance Professionals with income more than 116K income per month
+- Undergrads with a family size of more than 2.5 and earning more than 116K per month 
+- Any one with a Current Account and spending of more than 3K per month on CC and earning less than 116K per month 
+
+```{r}
+#Model classification accuracy
+TBank.train$predict.class <- predict(m1, TBank.train, type="class")
+with(TBank.train, table(TBank.train$`PersonalLoan`, predict.class))
+```
+```{r}
+## Classfication accuracy
+classAccur <- (3152+309)/3501  ## 98.08 %
+
+## Classfication Error
+ClassError <- (23+17)/3501  ## 1.91 %
+
+## Senstivity
+Sensitivity <- 309/(309+17)   ## 83.89 %
+
+## Specificity
+Specificity <- 3152/(3152+23)   ## 99.68 %
+
+print (" Classification Accuracy")
+classAccur
+print("Classifcation error")
+ClassError
+print("Senstivity")
+Sensitivity
+print("Specificity")
+Specificity
+
+
+```
+
+
+```{r}
+## to find how the tree performs and derive cp value
+#The following table shall show CP values in the tree only if there is a significant jump in the error
+#Look at xerror which shows the error factor using cross validated dated (K times)
+printcp(m1)
+
+
+```
+Observation:
+- x error is continuousy decreasing. We will stop at nsplit = 4 where CP = .0080321
+
+
+```{r}
+## Plotting the CP with Error
+plotcp(m1)
+
+
+```
+Observation 
+- As it is evident from the graph with nsplit = 4 and cp = .008
+- 
+```{r}
+## Important variables
+ m1$variable.importance
+```
+Observation:
+- Education , income, no of family members are the top 3 important variable.
+```{r}
+## Pruning tree
+ptree<- prune(m1, cp= 0.0080321,"CP")
+printcp(ptree)
+rpart.plot(ptree, cex= .65)
+
+```
+```{r}
+## Predicting
+
+TBank.train$predict.class <- predict(m1, TBank.train, type="class")
+with(TBank.train, table(TBank.train$`PersonalLoan`, predict.class))
+
+```
+
+```{r}
+
+## Post pruning
+
+TBank.train$predict.class <- predict(ptree, TBank.train, type="class")
+with(TBank.train, table(TBank.train$`PersonalLoan`, predict.class))
+Tbank.test$predict.score = predict(ptree, Tbank.test, type = "prob")
+Tbank.test$predict.class = predict(ptree, Tbank.test, type = "class")
+nrow(Tbank.test$predict.class)
+threshold = .7
+
+Tbank.test$ploan.predict=Tbank.test$predict.score
+Tbank.test$ploan.predict = ifelse(Tbank.test$ploan.predict >= .7, 1, 0)
+
+nrow(Tbank.test$ploan.predict)
+Tbank.test$ploan.predict =  as.factor(Tbank.test$ploan.predict)
+
+Cart.Confusion.Matrix = confusionMatrix(TBank.train$predict.class,reference = TBank.train$PersonalLoan, positive = "1")
+Cart.Confusion.Matrix
+
+MLmetrics::AUC(TBank.train$predict.class, TBank.train$`Personal Loan`)    ### 95.67 %
+
+MLmetrics::AUC(Tbank.test$predict.class, Tbank.test$`Personal Loan`)
+
+```
+
